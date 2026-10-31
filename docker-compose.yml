@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: island
+      POSTGRES_USER: island
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-demo-only}
+      TZ: Europe/Moscow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U island -d island"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://island:${POSTGRES_PASSWORD:-local-demo-only}@postgres:5432/island
+      JWT_SECRET: ${JWT_SECRET:-local-demo-secret-replace-for-deployment}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      TZ: Europe/Moscow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+volumes:
+  pgdata:
